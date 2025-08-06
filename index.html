@@ -2,25 +2,18 @@
 <html lang="ar">
 <head>
   <meta charset="UTF-8">
-  <title>خريطة الفروع وحساب المسافات</title>
+  <title>خريطة الفروع المتشابهة</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Leaflet CSS & JS -->
+  <!-- Leaflet & Turf.js -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-  <!-- Turf.js لحساب المسافات -->
   <script src="https://unpkg.com/@turf/turf/turf.min.js"></script>
 
   <style>
     #map { height: 90vh; }
-    .button-container {
-      margin: 10px;
-    }
-    button {
-      margin: 5px;
-      padding: 8px;
-    }
+    .button-container { margin: 10px; }
+    button { margin: 5px; padding: 8px; }
   </style>
 </head>
 <body>
@@ -33,48 +26,30 @@
   <div id="map"></div>
 
   <script>
-    let map = L.map('map').setView([31.95, 35.9], 8); // افتراضي في الضفة الغربية
-    let srafaraLayer, governorateLayer;
+    let map = L.map('map').setView([31.95, 35.9], 8); // الضفة الغربية
+    let srafaraLayer;
     let allBranches = [];
 
-    // إضافة خريطة الأساس
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // تحميل البيانات من GitHub
     async function loadData() {
-      // إزالة الطبقات القديمة
       if (srafaraLayer) map.removeLayer(srafaraLayer);
-      if (governorateLayer) map.removeLayer(governorateLayer);
       allBranches = [];
 
-      const srafaraURL = 'https://srafaramallah.github.io/srafara.json';
-      const governorateURL = 'https://srafaramallah.github.io/Governorate.json';
+      const srafaraURL = 'https://srafaramallah.github.io/srafara.json'; // عدّل هذا الرابط لرابطك الحقيقي
+      const res = await fetch(srafaraURL);
+      const data = await res.json();
 
-      const [srafaraRes, governorateRes] = await Promise.all([
-        fetch(srafaraURL),
-        fetch(governorateURL)
-      ]);
-
-      const srafaraData = await srafaraRes.json();
-      const governorateData = await governorateRes.json();
-
-      // عرض المحافظات
-      governorateLayer = L.geoJSON(governorateData, {
-        style: { color: '#999', weight: 1, fillOpacity: 0.1 }
-      }).addTo(map);
-
-      // عرض الفروع
-      srafaraLayer = L.geoJSON(srafaraData, {
+      srafaraLayer = L.geoJSON(data, {
         onEachFeature: function (feature, layer) {
-          const name = feature.properties["الاسم"] || "غير معروف";
-          layer.bindPopup(`<b>${name}</b>`);
-          allBranches.push({
-            name: name,
-            coords: feature.geometry.coordinates.reverse(), // [lat, lng]
-            layer: layer
-          });
+          const name = feature.properties["اسم_ا"];
+          if (name) {
+            const coords = feature.geometry.coordinates.slice().reverse();
+            allBranches.push({ name, coords, layer });
+            layer.bindPopup(`<b>${name}</b>`);
+          }
         },
         pointToLayer: function (feature, latlng) {
           return L.circleMarker(latlng, { radius: 6, color: 'blue' });
@@ -82,47 +57,42 @@
       }).addTo(map);
     }
 
-    // حساب المسافات بين الفروع المتشابهة
     function calculateSimilarBranchDistances() {
       if (allBranches.length === 0) {
-        alert("يجب أولاً تحميل البيانات.");
+        alert("يرجى تحميل البيانات أولاً.");
         return;
       }
 
-      // تصنيف الفروع حسب الاسم
-      let groups = {};
-      for (let branch of allBranches) {
-        if (!groups[branch.name]) {
-          groups[branch.name] = [];
-        }
+      // تجميع الفروع حسب الاسم
+      const groups = {};
+      allBranches.forEach(branch => {
+        if (!groups[branch.name]) groups[branch.name] = [];
         groups[branch.name].push(branch);
-      }
+      });
 
-      // لكل مجموعة متشابهة، اختر الرئيسي بشكل عشوائي
-      Object.values(groups).forEach(group => {
-        if (group.length < 2) return;
+      // معالجة كل مجموعة تحتوي على أكثر من نقطة واحدة
+      for (const [name, group] of Object.entries(groups)) {
+        if (group.length < 2) continue;
 
         const main = group[Math.floor(Math.random() * group.length)];
         main.layer.setStyle({ color: 'red' });
         main.layer.bindPopup(`<b>${main.name}</b><br>(فرع رئيسي)`);
 
-        for (let b of group) {
-          if (b === main) continue;
+        group.forEach(branch => {
+          if (branch === main) return;
 
-          // رسم خط
-          const line = L.polyline([main.coords, b.coords], { color: 'green', weight: 2 }).addTo(map);
+          // رسم خط بين الرئيسي والفرع الآخر
+          const line = L.polyline([main.coords, branch.coords], { color: 'green', weight: 2 }).addTo(map);
 
           // حساب المسافة باستخدام Turf
           const from = turf.point([main.coords[1], main.coords[0]]);
-          const to = turf.point([b.coords[1], b.coords[0]]);
+          const to = turf.point([branch.coords[1], branch.coords[0]]);
           const distance = turf.distance(from, to, { units: 'kilometers' }).toFixed(2);
 
-          // إضافة Popup
-          b.layer.bindPopup(`<b>${b.name}</b><br>المسافة إلى الرئيسي: ${distance} كم`);
-        }
-      });
+          branch.layer.bindPopup(`<b>${branch.name}</b><br>المسافة إلى الرئيسي: ${distance} كم`);
+        });
+      }
     }
   </script>
 </body>
 </html>
-
