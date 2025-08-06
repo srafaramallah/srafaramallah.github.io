@@ -1,272 +1,127 @@
 <!DOCTYPE html>
 <html lang="ar">
 <head>
-    <meta charset="UTF-8">
-    <title>خريطة مكاتب الصرافة في الضفة الغربية</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-    <meta name="theme-color" content="#d32f2f">
+  <meta charset="UTF-8">
+  <title>خريطة الفروع وحساب المسافات</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- Leaflet -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-    <!-- Routing -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
-    <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.min.js"></script>
+  <!-- Turf.js لحساب المسافات -->
+  <script src="https://unpkg.com/@turf/turf/turf.min.js"></script>
 
-    <!-- SheetJS -->
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-
-    <style>
-        body { margin: 0; font-family: 'Arial', sans-serif; background-color: #f5f5f5; }
-        #map { height: 80vh; }
-        #controls {
-            padding: 10px;
-            background-color: #ffffff;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            direction: rtl;
-            text-align: center;
-        }
-        select, button {
-            padding: 5px 10px;
-            font-size: 16px;
-            margin: 5px 8px 5px 0;
-            cursor: pointer;
-        }
-        .info-box {
-            font-weight: bold;
-            margin-top: 5px;
-        }
-    </style>
+  <style>
+    #map { height: 90vh; }
+    .button-container {
+      margin: 10px;
+    }
+    button {
+      margin: 5px;
+      padding: 8px;
+    }
+  </style>
 </head>
 <body>
 
-<div id="controls">
-    <label>اختر نوع المكتب:</label>
-    <select id="nearbySelect">
-        <option value="all">الكل</option>
-        <option value="westron">westron</option>
-        <option value="Money Gram">Money Gram</option>
-    </select>
-    <button id="nearestBtn">أقرب مكتب</button>
-    <button id="locateBtn">تحديد موقعي</button>
-    <button id="exportExcelBtn">تصدير إلى Excel</button>
-    <div class="info-box" id="countBox">عدد المكاتب الظاهرة: ...</div>
-</div>
+  <div class="button-container">
+    <button onclick="loadData()">📂 تحميل البيانات</button>
+    <button onclick="calculateSimilarBranchDistances()">📏 حساب المسافات بين الفروع المتشابهة</button>
+  </div>
 
-<div id="map"></div>
+  <div id="map"></div>
 
-<script>
-    if (location.protocol !== "https:" && location.hostname !== "localhost" && location.protocol !== "http:") {
-        alert("يرجى فتح الموقع من خلال سيرفر محلي أو HTTPS لكي تعمل ميزة تحديد الموقع والملاحة.");
+  <script>
+    let map = L.map('map').setView([31.95, 35.9], 8); // افتراضي في الضفة الغربية
+    let srafaraLayer, governorateLayer;
+    let allBranches = [];
+
+    // إضافة خريطة الأساس
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // تحميل البيانات من GitHub
+    async function loadData() {
+      // إزالة الطبقات القديمة
+      if (srafaraLayer) map.removeLayer(srafaraLayer);
+      if (governorateLayer) map.removeLayer(governorateLayer);
+      allBranches = [];
+
+      const srafaraURL = 'https://your-username.github.io/srafara.json';
+      const governorateURL = 'https://your-username.github.io/Governorate.json';
+
+      const [srafaraRes, governorateRes] = await Promise.all([
+        fetch(srafaraURL),
+        fetch(governorateURL)
+      ]);
+
+      const srafaraData = await srafaraRes.json();
+      const governorateData = await governorateRes.json();
+
+      // عرض المحافظات
+      governorateLayer = L.geoJSON(governorateData, {
+        style: { color: '#999', weight: 1, fillOpacity: 0.1 }
+      }).addTo(map);
+
+      // عرض الفروع
+      srafaraLayer = L.geoJSON(srafaraData, {
+        onEachFeature: function (feature, layer) {
+          const name = feature.properties["الاسم"] || "غير معروف";
+          layer.bindPopup(`<b>${name}</b>`);
+          allBranches.push({
+            name: name,
+            coords: feature.geometry.coordinates.reverse(), // [lat, lng]
+            layer: layer
+          });
+        },
+        pointToLayer: function (feature, latlng) {
+          return L.circleMarker(latlng, { radius: 6, color: 'blue' });
+        }
+      }).addTo(map);
     }
 
-    var map = L.map('map').setView([32.0, 35.3], 11);
+    // حساب المسافات بين الفروع المتشابهة
+    function calculateSimilarBranchDistances() {
+      if (allBranches.length === 0) {
+        alert("يجب أولاً تحميل البيانات.");
+        return;
+      }
 
-    let allPointsLayer = null;
-    let allFeatures = [];
-    let routingControl = null;
-    let nearestMarker = null;
-    let currentFiltered = [];
-
-    // ✅ تحميل طبقة المحافظات المعدلة
-    fetch('Governarates_1.geojson')
-        .then(res => res.json())
-        .then(data => {
-            let layer = L.geoJSON(data, {
-                style: {
-                    color: 'blue',
-                    weight: 2,
-                    fillOpacity: 0.1
-                }
-            }).addTo(map);
-            map.fitBounds(layer.getBounds());
-        });
-
-    // ✅ تحميل بيانات المكاتب المعدلة
-    fetch('Money_Changers_WestBank.json')
-        .then(res => res.json())
-        .then(data => {
-            allFeatures = data.features;
-            showFilteredPoints("all");
-        });
-
-    function showFilteredPoints(filterValue) {
-        if (allPointsLayer) map.removeLayer(allPointsLayer);
-        if (routingControl) map.removeControl(routingControl);
-        if (nearestMarker) map.removeLayer(nearestMarker);
-
-        currentFiltered = filterValue === "all"
-            ? allFeatures
-            : allFeatures.filter(f => f.properties.Near_by === filterValue);
-
-        document.getElementById("countBox").textContent = "عدد المكاتب الظاهرة: " + currentFiltered.length;
-
-        allPointsLayer = L.geoJSON(currentFiltered, {
-            pointToLayer: function (feature, latlng) {
-                return L.circleMarker(latlng, {
-                    radius: 6,
-                    fillColor: "red",
-                    color: "#000",
-                    weight: 1,
-                    opacity: 1,
-                    fillOpacity: 0.9
-                });
-            },
-            onEachFeature: function (feature, layer) {
-                let near = feature.properties.Near_by || "غير معروف";
-                let popupContent = `<b>قريب من:</b> ${near}<br><button class="navigate-btn">ابدأ الملاحة</button>`;
-                layer.bindPopup(popupContent);
-
-                layer.on('popupopen', function () {
-                    let popup = layer.getPopup();
-                    let container = popup.getElement();
-                    let btn = container.querySelector('.navigate-btn');
-                    if (btn) {
-                        btn.onclick = function () {
-                            let coords = feature.geometry.coordinates;
-                            alert("جاري بدء الملاحة إلى الموقع المحدد...");
-                            navigateTo([coords[1], coords[0]]);
-                        };
-                    }
-                });
-            }
-        }).addTo(map);
-
-        if (allPointsLayer && currentFiltered.length > 0) {
-            map.fitBounds(allPointsLayer.getBounds());
+      // تصنيف الفروع حسب الاسم
+      let groups = {};
+      for (let branch of allBranches) {
+        if (!groups[branch.name]) {
+          groups[branch.name] = [];
         }
+        groups[branch.name].push(branch);
+      }
+
+      // لكل مجموعة متشابهة، اختر الرئيسي بشكل عشوائي
+      Object.values(groups).forEach(group => {
+        if (group.length < 2) return;
+
+        const main = group[Math.floor(Math.random() * group.length)];
+        main.layer.setStyle({ color: 'red' });
+        main.layer.bindPopup(`<b>${main.name}</b><br>(فرع رئيسي)`);
+
+        for (let b of group) {
+          if (b === main) continue;
+
+          // رسم خط
+          const line = L.polyline([main.coords, b.coords], { color: 'green', weight: 2 }).addTo(map);
+
+          // حساب المسافة باستخدام Turf
+          const from = turf.point([main.coords[1], main.coords[0]]);
+          const to = turf.point([b.coords[1], b.coords[0]]);
+          const distance = turf.distance(from, to, { units: 'kilometers' }).toFixed(2);
+
+          // إضافة Popup
+          b.layer.bindPopup(`<b>${b.name}</b><br>المسافة إلى الرئيسي: ${distance} كم`);
+        }
+      });
     }
-
-    document.getElementById('nearbySelect').addEventListener('change', function () {
-        showFilteredPoints(this.value);
-    });
-
-    function navigateTo(destination) {
-        if (!navigator.geolocation) {
-            alert("المتصفح لا يدعم تحديد الموقع.");
-            return;
-        }
-
-        navigator.geolocation.getCurrentPosition(function (position) {
-            let currentLocation = L.latLng(position.coords.latitude, position.coords.longitude);
-            map.setView(currentLocation, 13);
-
-            if (routingControl) map.removeControl(routingControl);
-
-            routingControl = L.Routing.control({
-                waypoints: [
-                    currentLocation,
-                    L.latLng(destination[0], destination[1])
-                ],
-                routeWhileDragging: false,
-                language: 'ar',
-                showAlternatives: false,
-                lineOptions: {
-                    styles: [{ color: '#d32f2f', opacity: 0.8, weight: 5 }]
-                },
-                router: L.Routing.osrmv1({
-                    serviceUrl: 'https://router.project-osrm.org/route/v1'
-                })
-            }).addTo(map);
-        }, function () {
-            alert("تعذر تحديد الموقع الحالي.");
-        });
-    }
-
-    function getDistance(latlng1, latlng2) {
-        return latlng1.distanceTo(latlng2);
-    }
-
-    function navigateToNearest() {
-        if (!navigator.geolocation) {
-            alert("المتصفح لا يدعم تحديد الموقع.");
-            return;
-        }
-
-        navigator.geolocation.getCurrentPosition(function (position) {
-            let currentLocation = L.latLng(position.coords.latitude, position.coords.longitude);
-
-            if (currentFiltered.length === 0) {
-                alert("لا توجد مكاتب في هذا الفلتر.");
-                return;
-            }
-
-            let nearestFeature = null;
-            let minDistance = Infinity;
-
-            currentFiltered.forEach(feature => {
-                let coords = feature.geometry.coordinates;
-                let pointLatLng = L.latLng(coords[1], coords[0]);
-                let dist = getDistance(currentLocation, pointLatLng);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    nearestFeature = feature;
-                }
-            });
-
-            if (nearestFeature) {
-                let coords = nearestFeature.geometry.coordinates;
-                let nearestLatLng = L.latLng(coords[1], coords[0]);
-
-                if (nearestMarker) map.removeLayer(nearestMarker);
-
-                let near = nearestFeature.properties.Near_by || "غير معروف";
-                nearestMarker = L.marker(nearestLatLng).addTo(map)
-                    .bindPopup(`<b>أقرب مكتب:</b> ${near}<br>المسافة: ${(minDistance / 1000).toFixed(2)} كم`)
-                    .openPopup();
-
-                map.setView(nearestLatLng, 14);
-                navigateTo([coords[1], coords[0]]);
-            } else {
-                alert("لم يتم العثور على أقرب مكتب.");
-            }
-
-        }, function () {
-            alert("تعذر تحديد الموقع الحالي.");
-        });
-    }
-
-    document.getElementById('nearestBtn').addEventListener('click', navigateToNearest);
-
-    document.getElementById('locateBtn').addEventListener('click', function () {
-        if (!navigator.geolocation) {
-            alert("المتصفح لا يدعم تحديد الموقع.");
-            return;
-        }
-
-        navigator.geolocation.getCurrentPosition(function (position) {
-            let lat = position.coords.latitude;
-            let lng = position.coords.longitude;
-            map.setView([lat, lng], 14);
-            L.marker([lat, lng]).addTo(map).bindPopup("موقعك الحالي").openPopup();
-        }, function () {
-            alert("تعذر تحديد الموقع الحالي.");
-        });
-    });
-
-    document.getElementById('exportExcelBtn').addEventListener('click', function () {
-        if (currentFiltered.length === 0) {
-            alert("لا توجد مكاتب لتصديرها.");
-            return;
-        }
-
-        let exportData = currentFiltered.map(f => {
-            return {
-                "الاسم": f.properties.Name || "",
-                "القريب من": f.properties.Near_by || "",
-                "العنوان": f.properties.Address || "",
-                "الهاتف": f.properties.Phone || "",
-                "الإحداثيات": f.geometry.coordinates[1].toFixed(6) + ", " + f.geometry.coordinates[0].toFixed(6)
-            };
-        });
-
-        let ws = XLSX.utils.json_to_sheet(exportData);
-        let wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "مكاتب الصرافة");
-        XLSX.writeFile(wb, "مكاتب_الصرافة.xlsx");
-    });
-</script>
-
+  </script>
 </body>
 </html>
