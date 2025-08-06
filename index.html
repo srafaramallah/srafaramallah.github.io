@@ -2,7 +2,7 @@
 <html lang="ar">
 <head>
   <meta charset="UTF-8">
-  <title>خريطة الفروع مع العنوان والمسافات</title>
+  <title>خريطة الفروع مع العناوين والمسافات</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- Leaflet & Turf -->
@@ -59,7 +59,7 @@
       distanceResults = [];
       document.getElementById("companySelect").innerHTML = '<option value="">🔍 اختر اسم الشركة</option>';
 
-      const srafaraURL = 'https://srafaramallah.github.io/srafara.json'; // ← غيّره إلى رابطك
+      const srafaraURL = 'https://srafaramallah.github.io/srafara.json'; // ← غيّره إلى رابطك الصحيح
       const res = await fetch(srafaraURL);
       const data = await res.json();
 
@@ -88,7 +88,7 @@
       alert("تم تحميل البيانات. الرجاء اختيار اسم الشركة.");
     }
 
-    // فلترة الخريطة حسب اسم الشركة
+    // فلترة الفروع حسب اسم الشركة
     function filterByCompany() {
       const selectedName = document.getElementById("companySelect").value;
       distanceResults = [];
@@ -110,7 +110,7 @@
       map.fitBounds(filteredLayer.getBounds());
     }
 
-    // حساب المسافات وفتح popup مع العنوان والمسافة
+    // حساب المسافات وفتح جميع النوافذ (بما في ذلك الرئيسي)
     function calculateSimilarBranchDistances() {
       if (!filteredBranches || filteredBranches.length < 2) {
         alert("يجب اختيار شركة تحتوي على أكثر من فرع.");
@@ -122,7 +122,8 @@
 
       const main = filteredBranches[Math.floor(Math.random() * filteredBranches.length)];
       main.layer.setStyle({ color: 'red' });
-      main.layer.bindPopup(`<b>${main.name}</b><br>${main.address}<br>(فرع رئيسي)`);
+      const mainPopup = `<b>${main.name}</b><br>${main.address}<br>(فرع رئيسي)`;
+      main.layer.bindPopup(mainPopup).openPopup();
 
       filteredBranches.forEach(branch => {
         if (branch === main) return;
@@ -134,8 +135,10 @@
 
         distanceResults.push({
           "الفرع الرئيسي": main.name,
+          "عنوان الرئيسي": main.address,
           "إحداثيات الرئيسي": `${main.coords[0]}, ${main.coords[1]}`,
           "الفرع": branch.name,
+          "عنوان الفرع": branch.address,
           "إحداثيات الفرع": `${branch.coords[0]}, ${branch.coords[1]}`,
           "المسافة (كم)": distText
         });
@@ -143,20 +146,15 @@
         // رسم الخط
         L.polyline([main.coords, branch.coords], { color: 'green', weight: 2 }).addTo(lineGroup);
 
-        // Popup مع العنوان والمسافة
+        // Popup مع فتح تلقائي
         const popupContent = `<b>${branch.name}</b><br>${branch.address}<br>المسافة إلى الرئيسي: ${distText} كم`;
         branch.layer.bindPopup(popupContent).openPopup();
       });
 
-      // فتح Popup للفرع الرئيسي
-      setTimeout(() => {
-        main.layer.openPopup();
-      }, 1000);
-
-      alert("تم حساب المسافات وفتح النوافذ مع العناوين.");
+      alert("تم حساب المسافات وفتح النوافذ لجميع الفروع.");
     }
 
-    // تصدير إلى Excel
+    // تصدير النتائج إلى Excel مع العناوين
     function exportToExcel() {
       if (distanceResults.length === 0) {
         alert("لا توجد نتائج لتصديرها.");
@@ -166,10 +164,8 @@
       const ws = XLSX.utils.json_to_sheet(distanceResults);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "المسافات");
-
       XLSX.writeFile(wb, "المسافات_بين_الفروع.xlsx");
     }
   </script>
 </body>
 </html>
-
