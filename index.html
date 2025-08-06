@@ -2,7 +2,7 @@
 <html lang="ar">
 <head>
   <meta charset="UTF-8">
-  <title>خريطة الفروع مع البحث وحساب المسافات</title>
+  <title>خريطة الفروع مع العنوان والمسافات</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- Leaflet & Turf -->
@@ -59,16 +59,17 @@
       distanceResults = [];
       document.getElementById("companySelect").innerHTML = '<option value="">🔍 اختر اسم الشركة</option>';
 
-      const srafaraURL = 'https://srafaramallah.github.io/srafara.json'; // ← غيّر هذا الرابط إلى رابطك الصحيح
+      const srafaraURL = 'https://your-username.github.io/srafara.json'; // ← غيّره إلى رابطك
       const res = await fetch(srafaraURL);
       const data = await res.json();
 
       srafaraLayer = L.geoJSON(data, {
         onEachFeature: function (feature, layer) {
           const name = feature.properties["اسم_ا"];
+          const address = feature.properties["العنو"] || "بدون عنوان";
           if (name) {
             const coords = feature.geometry.coordinates.slice().reverse(); // lat,lng
-            allBranches.push({ name, coords, layer });
+            allBranches.push({ name, coords, layer, address });
           }
         },
         pointToLayer: (feature, latlng) => L.circleMarker(latlng, { radius: 6, color: 'gray' })
@@ -101,7 +102,7 @@
       filteredLayer = L.layerGroup();
       filteredBranches.forEach(b => {
         const marker = L.circleMarker(b.coords, { radius: 6, color: 'blue' })
-          .bindPopup(`<b>${b.name}</b>`)
+          .bindPopup(`<b>${b.name}</b><br><small>${b.address}</small>`)
           .addTo(filteredLayer);
         b.layer = marker;
       });
@@ -109,7 +110,7 @@
       map.fitBounds(filteredLayer.getBounds());
     }
 
-    // حساب المسافات وفتح البوب أب لجميع الفروع
+    // حساب المسافات وفتح popup مع العنوان والمسافة
     function calculateSimilarBranchDistances() {
       if (!filteredBranches || filteredBranches.length < 2) {
         alert("يجب اختيار شركة تحتوي على أكثر من فرع.");
@@ -121,7 +122,7 @@
 
       const main = filteredBranches[Math.floor(Math.random() * filteredBranches.length)];
       main.layer.setStyle({ color: 'red' });
-      main.layer.bindPopup(`<b>${main.name}</b><br>(فرع رئيسي)`); // نفتح لاحقًا بعد الفروع الأخرى
+      main.layer.bindPopup(`<b>${main.name}</b><br>${main.address}<br>(فرع رئيسي)`);
 
       filteredBranches.forEach(branch => {
         if (branch === main) return;
@@ -142,17 +143,17 @@
         // رسم الخط
         L.polyline([main.coords, branch.coords], { color: 'green', weight: 2 }).addTo(lineGroup);
 
-        // إعداد وفتح Popup تلقائيًا
-        const popupContent = `<b>${branch.name}</b><br>المسافة إلى الرئيسي: ${distText} كم`;
+        // Popup مع العنوان والمسافة
+        const popupContent = `<b>${branch.name}</b><br>${branch.address}<br>المسافة إلى الرئيسي: ${distText} كم`;
         branch.layer.bindPopup(popupContent).openPopup();
       });
 
-      // فتح بوب أب الرئيسي بعد لحظة
+      // فتح Popup للفرع الرئيسي
       setTimeout(() => {
         main.layer.openPopup();
       }, 1000);
 
-      alert("تم حساب المسافات وفتح جميع النوافذ.");
+      alert("تم حساب المسافات وفتح النوافذ مع العناوين.");
     }
 
     // تصدير إلى Excel
