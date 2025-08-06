@@ -49,8 +49,8 @@
       if (governorateLayer) map.removeLayer(governorateLayer);
       allBranches = [];
 
-      const srafaraURL = 'https://your-username.github.io/srafara.json';
-      const governorateURL = 'https://your-username.github.io/Governorate.json';
+      const srafaraURL = 'https://srafaramallah.github.io/srafara.json';
+      const governorateURL = 'https://srafaramallah.github.io/Governorate.json';
 
       const [srafaraRes, governorateRes] = await Promise.all([
         fetch(srafaraURL),
@@ -125,3 +125,4 @@
   </script>
 </body>
 </html>
+
