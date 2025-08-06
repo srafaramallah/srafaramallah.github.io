@@ -22,13 +22,6 @@
       margin: 5px;
       padding: 6px;
     }
-    .leaflet-label {
-      background-color: white;
-      padding: 2px 4px;
-      border-radius: 4px;
-      font-size: 12px;
-      border: 1px solid #888;
-    }
   </style>
 </head>
 <body>
@@ -66,7 +59,7 @@
       distanceResults = [];
       document.getElementById("companySelect").innerHTML = '<option value="">🔍 اختر اسم الشركة</option>';
 
-      const srafaraURL = 'https://srafaramallah.github.io/srafara.json'; // ← غيّره إلى رابطك الصحيح
+      const srafaraURL = 'https://your-username.github.io/srafara.json'; // ← غيّره إلى رابطك الصحيح
       const res = await fetch(srafaraURL);
       const data = await res.json();
 
@@ -116,7 +109,7 @@
       map.fitBounds(filteredLayer.getBounds());
     }
 
-    // حساب المسافات مع إضافة المسافة على الخط
+    // حساب المسافات مع إظهار النوافذ تلقائيًا
     function calculateSimilarBranchDistances() {
       if (!filteredBranches || filteredBranches.length < 2) {
         alert("يجب اختيار شركة تحتوي على أكثر من فرع.");
@@ -128,7 +121,7 @@
 
       const main = filteredBranches[Math.floor(Math.random() * filteredBranches.length)];
       main.layer.setStyle({ color: 'red' });
-      main.layer.bindPopup(`<b>${main.name}</b><br>(فرع رئيسي)`);
+      main.layer.bindPopup(`<b>${main.name}</b><br>(فرع رئيسي)`).openPopup(); // فتح Popup الرئيسي
 
       filteredBranches.forEach(branch => {
         if (branch === main) return;
@@ -146,26 +139,15 @@
           "المسافة (كم)": distText
         });
 
-        // رسم خط
-        const line = L.polyline([main.coords, branch.coords], { color: 'green', weight: 2 }).addTo(lineGroup);
+        // رسم الخط
+        L.polyline([main.coords, branch.coords], { color: 'green', weight: 2 }).addTo(lineGroup);
 
-        // حساب نقطة المنتصف
-        const midLat = (main.coords[0] + branch.coords[0]) / 2;
-        const midLng = (main.coords[1] + branch.coords[1]) / 2;
-
-        // إضافة المسافة كنص على الخط
-        const label = L.marker([midLat, midLng], {
-          icon: L.divIcon({
-            className: 'leaflet-label',
-            html: `${distText} كم`,
-            iconSize: [60, 20]
-          })
-        }).addTo(lineGroup);
-
-        branch.layer.bindPopup(`<b>${branch.name}</b><br>المسافة إلى الرئيسي: ${distText} كم`);
+        // إعداد وفتح Popup تلقائيًا
+        const popupContent = `<b>${branch.name}</b><br>المسافة إلى الرئيسي: ${distText} كم`;
+        branch.layer.bindPopup(popupContent).openPopup();
       });
 
-      alert("تم حساب المسافات وعرضها على الخريطة.");
+      alert("تم حساب المسافات وفتح النوافذ تلقائيًا.");
     }
 
     // تصدير إلى Excel
