@@ -2,7 +2,7 @@
 <html lang="ar">
 <head>
   <meta charset="UTF-8">
-  <title>خريطة الفروع المتشابهة مع البحث والتصدير</title>
+  <title>خريطة الفروع مع البحث وحساب المسافات</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- Leaflet & Turf -->
@@ -59,7 +59,7 @@
       distanceResults = [];
       document.getElementById("companySelect").innerHTML = '<option value="">🔍 اختر اسم الشركة</option>';
 
-      const srafaraURL = 'https://srafaramallah.github.io/srafara.json'; // ← غيّره إلى رابطك الصحيح
+      const srafaraURL = 'https://srafaramallah.github.io/srafara.json'; // ← غيّر هذا الرابط إلى رابطك الصحيح
       const res = await fetch(srafaraURL);
       const data = await res.json();
 
@@ -109,7 +109,7 @@
       map.fitBounds(filteredLayer.getBounds());
     }
 
-    // حساب المسافات مع إظهار النوافذ تلقائيًا
+    // حساب المسافات وفتح البوب أب لجميع الفروع
     function calculateSimilarBranchDistances() {
       if (!filteredBranches || filteredBranches.length < 2) {
         alert("يجب اختيار شركة تحتوي على أكثر من فرع.");
@@ -121,7 +121,7 @@
 
       const main = filteredBranches[Math.floor(Math.random() * filteredBranches.length)];
       main.layer.setStyle({ color: 'red' });
-      main.layer.bindPopup(`<b>${main.name}</b><br>(فرع رئيسي)`).openPopup(); // فتح Popup الرئيسي
+      main.layer.bindPopup(`<b>${main.name}</b><br>(فرع رئيسي)`); // نفتح لاحقًا بعد الفروع الأخرى
 
       filteredBranches.forEach(branch => {
         if (branch === main) return;
@@ -147,7 +147,12 @@
         branch.layer.bindPopup(popupContent).openPopup();
       });
 
-      alert("تم حساب المسافات وفتح النوافذ تلقائيًا.");
+      // فتح بوب أب الرئيسي بعد لحظة
+      setTimeout(() => {
+        main.layer.openPopup();
+      }, 1000);
+
+      alert("تم حساب المسافات وفتح جميع النوافذ.");
     }
 
     // تصدير إلى Excel
@@ -166,4 +171,3 @@
   </script>
 </body>
 </html>
-
