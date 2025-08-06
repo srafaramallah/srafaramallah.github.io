@@ -22,6 +22,13 @@
       margin: 5px;
       padding: 6px;
     }
+    .leaflet-label {
+      background-color: white;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-size: 12px;
+      border: 1px solid #888;
+    }
   </style>
 </head>
 <body>
@@ -43,6 +50,7 @@
     let allBranches = [];
     let filteredBranches = [];
     let distanceResults = [];
+    let lineGroup = L.layerGroup().addTo(map);
 
     // خريطة الأساس
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -53,11 +61,12 @@
     async function loadData() {
       if (srafaraLayer) map.removeLayer(srafaraLayer);
       if (filteredLayer) map.removeLayer(filteredLayer);
+      lineGroup.clearLayers();
       allBranches = [];
       distanceResults = [];
       document.getElementById("companySelect").innerHTML = '<option value="">🔍 اختر اسم الشركة</option>';
 
-      const srafaraURL = 'https://srafaramallah.github.io/srafara.json'; // ← غيّره لرابطك الحقيقي
+      const srafaraURL = 'https://srafaramallah.github.io/srafara.json'; // ← غيّره إلى رابطك الصحيح
       const res = await fetch(srafaraURL);
       const data = await res.json();
 
@@ -89,6 +98,7 @@
     function filterByCompany() {
       const selectedName = document.getElementById("companySelect").value;
       distanceResults = [];
+      lineGroup.clearLayers();
 
       if (filteredLayer) map.removeLayer(filteredLayer);
       if (!selectedName) return;
@@ -106,7 +116,7 @@
       map.fitBounds(filteredLayer.getBounds());
     }
 
-    // حساب المسافات
+    // حساب المسافات مع إضافة المسافة على الخط
     function calculateSimilarBranchDistances() {
       if (!filteredBranches || filteredBranches.length < 2) {
         alert("يجب اختيار شركة تحتوي على أكثر من فرع.");
@@ -114,6 +124,7 @@
       }
 
       distanceResults = [];
+      lineGroup.clearLayers();
 
       const main = filteredBranches[Math.floor(Math.random() * filteredBranches.length)];
       main.layer.setStyle({ color: 'red' });
@@ -135,12 +146,26 @@
           "المسافة (كم)": distText
         });
 
-        // خط وPopup
-        L.polyline([main.coords, branch.coords], { color: 'green', weight: 2 }).addTo(map);
+        // رسم خط
+        const line = L.polyline([main.coords, branch.coords], { color: 'green', weight: 2 }).addTo(lineGroup);
+
+        // حساب نقطة المنتصف
+        const midLat = (main.coords[0] + branch.coords[0]) / 2;
+        const midLng = (main.coords[1] + branch.coords[1]) / 2;
+
+        // إضافة المسافة كنص على الخط
+        const label = L.marker([midLat, midLng], {
+          icon: L.divIcon({
+            className: 'leaflet-label',
+            html: `${distText} كم`,
+            iconSize: [60, 20]
+          })
+        }).addTo(lineGroup);
+
         branch.layer.bindPopup(`<b>${branch.name}</b><br>المسافة إلى الرئيسي: ${distText} كم`);
       });
 
-      alert("تم حساب المسافات.");
+      alert("تم حساب المسافات وعرضها على الخريطة.");
     }
 
     // تصدير إلى Excel
@@ -159,4 +184,3 @@
   </script>
 </body>
 </html>
-
